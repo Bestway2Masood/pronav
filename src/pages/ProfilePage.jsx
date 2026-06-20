@@ -33,7 +33,7 @@ async function extractTextFromFile(file) {
   })
 }
 
-async function parseWithClaude(fileContent, fileName, apiKey) {
+async function parseWithClaude(fileContent, fileName) {
   const isPDF = fileName.toLowerCase().endsWith('.pdf')
   let messages
   if (isPDF) {
@@ -52,14 +52,9 @@ async function parseWithClaude(fileContent, fileName, apiKey) {
     }]
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('/api/claude', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'anthropic-version': '2023-06-01',
-      'x-api-key': apiKey
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages })
   })
 
