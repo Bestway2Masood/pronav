@@ -157,8 +157,7 @@ export default function ProfilePage() {
       const fileContent = await extractTextFromFile(file)
 
       setParseProgress('AI is analysing your CV — this takes about 15 seconds...')
-      const apiKey = import.meta.env.VITE_ANTHROPIC_KEY
-      const parsed = await parseWithClaude(fileContent, file.name, apiKey)
+      const parsed = await parseWithClaude(fileContent, file.name)
 
       if (!parsed || !parsed.full_name) {
         setParseMsg({ type: 'error', text: 'Could not extract profile from CV. Your existing profile data has been preserved. Please fill in details manually.' })
