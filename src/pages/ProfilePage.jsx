@@ -144,8 +144,11 @@ export default function ProfilePage() {
        setParseMsg({ type: 'success', text: 'CV parsed successfully — your existing data has been preserved and enhanced. Switching to profile view...' })
         setTimeout(() => setActiveTab('profile'), 2000)
       }
-    } catch (err) {
-      setParseMsg({ type: 'error', text: 'Something went wrong. Please try again or fill in your profile manually.' })
+   } catch (err) {
+      console.error('CV parse error:', err)
+      console.error('Error message:', err.message)
+      console.error('Error stack:', err.stack)
+      setParseMsg({ type: 'error', text: 'Error: ' + (err.message || 'Unknown error') + ' — check browser console for details.' })
     }
     setParsing(false); setParseProgress('')
     if (fileRef.current) fileRef.current.value = ''
