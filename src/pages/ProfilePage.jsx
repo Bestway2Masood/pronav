@@ -3,7 +3,17 @@ import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { upsertProfile, uploadDocument, calculateProfileStrength } from '../lib/profile'
 
-const SECTORS = ['Education in Emergencies', 'Child Protection', 'Gender Equality', 'Public Health', 'Early Childhood Development', 'Diaspora Engagement', 'Humanitarian Coordination', 'Food Security', 'WASH', 'Shelter & NFI', 'Livelihoods', 'Mental Health & Psychosocial', 'Refugee Response', 'Peacebuilding', 'Climate & Environment', 'Urban Resilience']
+const SECTORS = [
+  'Agriculture', 'Camp Coordination & Management', 'Child Protection',
+  'Climate & Environment', 'Coordination', 'Diaspora Engagement',
+  'Disaster Risk Reduction', 'Early Childhood Development', 'Education in Emergencies',
+  'Food Security & Nutrition', 'Gender Equality & GBV', 'Health', 'HIV/Aids',
+  'Humanitarian Coordination', 'Livelihoods', 'Mental Health & Psychosocial',
+  'Migration & Displacement', 'Mine Action', 'Peacebuilding & Conflict',
+  'Protection & Human Rights', 'Public Health', 'Recovery & Reconstruction',
+  'Refugee Response', 'Safety & Security', 'Shelter & NFI', 'WASH', 'Urban Resilience'
+]
+
 const CAREER_STATUS = [
   { value: 'seeking', label: 'Actively seeking opportunities' },
   { value: 'open', label: 'Open to opportunities' },
@@ -60,6 +70,24 @@ async function parseWithClaude(fileContent, fileName, apiKey) {
   } catch {
     return null
   }
+}
+
+// Only include fields that have actual values — never overwrite with empty
+function buildSafeProfileUpdate(parsed, existingProfile) {
+  const update = { cv_parsed: true }
+  if (parsed.full_name?.trim()) update.full_name = parsed.full_name.trim()
+  if (parsed.headline?.trim()) update.headline = parsed.headline.trim()
+  if (parsed.summary?.trim()) update.summary = parsed.summary.trim()
+  if (parsed.years_experience > 0) update.years_experience = parsed.years_experience
+  if (parsed.location?.trim()) update.location = parsed.location.trim()
+  if (parsed.sectors?.length > 0) update.sectors = parsed.sectors
+  if (parsed.themes?.length > 0) update.themes = parsed.themes
+  if (parsed.skills?.length > 0) update.skills = parsed.skills
+  if (parsed.languages?.length > 0) update.languages = parsed.languages
+  if (parsed.education?.length > 0) update.education = parsed.education
+  if (parsed.experience?.length > 0) update.experience = parsed.experience
+  if (parsed.career_status) update.career_status = parsed.career_status
+  return update
 }
 
 export default function ProfilePage() {
@@ -121,35 +149,43 @@ export default function ProfilePage() {
     const file = e.target.files[0]
     if (!file) return
     setParsing(true); setParseMsg(null)
+
     try {
+      setParseProgress('Uploading your CV...')
+      const { error: uploadError } = await uploadDocument(user.id, file, 'cv')
+      if (uploadError) {
+        setParseMsg({ type: 'error', text: 'Upload failed: ' + uploadError.message })
+        setParsing(false); return
+      }
+
+      setParseProgress('Reading document...')
+      const fileContent = await extractTextFromFile(file)
+
+      setParseProgress('AI is analysing your CV — this takes about 15 seconds...')
+      const apiKey = import.meta.env.VITE_ANTHROPIC_KEY
+      const parsed = await parseWithClaude(fileContent, file.name, apiKey)
+
+      if (!parsed || !parsed.full_name) {
+        setParseMsg({ type: 'error', text: 'Could not extract profile from CV. Your existing profile data has been preserved. Please fill in details manually.' })
+        setParsing(false); setParseProgress(''); return
+      }
+
       setParseProgress('Saving your profile...')
-      const safeUpdate = { cv_parsed: true }
-      if (parsed.full_name?.trim()) safeUpdate.full_name = parsed.full_name.trim()
-      if (parsed.headline?.trim()) safeUpdate.headline = parsed.headline.trim()
-      if (parsed.summary?.trim()) safeUpdate.summary = parsed.summary.trim()
-      if (parsed.years_experience > 0) safeUpdate.years_experience = parsed.years_experience
-      if (parsed.location?.trim()) safeUpdate.location = parsed.location.trim()
-      if (parsed.sectors?.length > 0) safeUpdate.sectors = parsed.sectors
-      if (parsed.themes?.length > 0) safeUpdate.themes = parsed.themes
-      if (parsed.skills?.length > 0) safeUpdate.skills = parsed.skills
-      if (parsed.languages?.length > 0) safeUpdate.languages = parsed.languages
-      if (parsed.education?.length > 0) safeUpdate.education = parsed.education
-      if (parsed.experience?.length > 0) safeUpdate.experience = parsed.experience
-      if (parsed.career_status) safeUpdate.career_status = parsed.career_status
+      // SAFE UPDATE: only overwrite fields that have actual values from CV
+      const safeUpdate = buildSafeProfileUpdate(parsed, profile)
       const { error: saveError } = await upsertProfile(user.id, safeUpdate)
+
       if (saveError) {
         setParseMsg({ type: 'error', text: 'Profile could not be saved: ' + saveError.message })
       } else {
         await refreshProfile()
-       setParseMsg({ type: 'success', text: 'CV parsed successfully — your existing data has been preserved and enhanced. Switching to profile view...' })
+        setParseMsg({ type: 'success', text: `CV parsed successfully — ${Object.keys(safeUpdate).length - 1} fields updated. Switching to profile view...` })
         setTimeout(() => setActiveTab('profile'), 2000)
       }
-   } catch (err) {
-      console.error('CV parse error:', err)
-      console.error('Error message:', err.message)
-      console.error('Error stack:', err.stack)
-      setParseMsg({ type: 'error', text: 'Error: ' + (err.message || 'Unknown error') + ' — check browser console for details.' })
+    } catch (err) {
+      setParseMsg({ type: 'error', text: 'Something went wrong. Your existing profile data has been preserved.' })
     }
+
     setParsing(false); setParseProgress('')
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -192,7 +228,7 @@ export default function ProfilePage() {
           <div className="card-body">
             <div style={{ background: 'var(--green-pale)', border: '1px solid #9fe1cb', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: '16px', fontSize: '12px', color: '#0f6e56' }}>
               <i className="ti ti-shield-check" style={{ marginRight: '6px' }} />
-              Your existing profile data is protected — CV upload will only add or improve fields, never delete what you have saved.
+              Your existing profile data is protected — CV upload will only add or improve fields, never delete what you've saved.
             </div>
             {parseMsg && (
               <div className={`alert alert-${parseMsg.type}`} style={{ marginBottom: '16px' }}>
@@ -249,7 +285,7 @@ export default function ProfilePage() {
               </div>
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label className="form-label">Professional headline</label>
-                <input value={form.headline} onChange={e => set('headline', e.target.value)} placeholder="e.g. Humanitarian & Development Advisor" />
+                <input value={form.headline} onChange={e => set('headline', e.target.value)} placeholder="e.g. Humanitarian & Development Advisor · 20+ years UN/INGO experience" />
               </div>
               <div className="form-group">
                 <label className="form-label">Years of experience</label>
@@ -267,7 +303,7 @@ export default function ProfilePage() {
               </div>
               <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                 <label className="form-label">Professional summary</label>
-                <textarea value={form.summary} onChange={e => set('summary', e.target.value)} rows={4} placeholder="A brief overview of your professional background and goals..." />
+                <textarea value={form.summary} onChange={e => set('summary', e.target.value)} rows={4} placeholder="A brief overview of your professional background, expertise, and career goals…" />
               </div>
             </div>
           </div>
@@ -275,7 +311,7 @@ export default function ProfilePage() {
           <div className="card" style={{ marginBottom: '20px' }}>
             <div className="card-head"><h3>Sectors & themes</h3></div>
             <div className="card-body">
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>Select all sectors relevant to your experience.</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>Select all sectors relevant to your experience — this powers personalised advice and knowledge content.</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {SECTORS.map(s => {
                   const active = form.sectors.includes(s)
@@ -304,7 +340,7 @@ export default function ProfilePage() {
                   <div key={i} style={{ padding: '12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-md)', borderLeft: '3px solid var(--green)' }}>
                     <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>{exp.title}</p>
                     <p style={{ fontSize: '12px', color: 'var(--green)', marginTop: '2px' }}>{exp.org}</p>
-                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{exp.from} - {exp.to}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{exp.from} – {exp.to}</p>
                     {exp.summary && <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>{exp.summary}</p>}
                   </div>
                 ))}
@@ -314,10 +350,10 @@ export default function ProfilePage() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button type="button" onClick={() => navigate('/dashboard')} className="btn-ghost">
-              Back to dashboard
+              ← Back to dashboard
             </button>
             <button type="submit" className="btn-primary" disabled={saving}>
-              {saving ? <><div className="spinner" style={{ width: '14px', height: '14px' }} /> Saving...</> : <><i className="ti ti-device-floppy" style={{ fontSize: '15px' }} /> Save profile</>}
+              {saving ? <><div className="spinner" style={{ width: '14px', height: '14px' }} /> Saving…</> : <><i className="ti ti-device-floppy" style={{ fontSize: '15px' }} /> Save profile</>}
             </button>
           </div>
         </form>
