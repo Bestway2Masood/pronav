@@ -151,4 +151,174 @@ export default function ProfilePage() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  const initials = (name) => name ?
+  const initials = (name) => name ? name.split(' ').slice(0,2).map(n=>n[0]).join('').toUpperCase() : '?'
+  const displayName = form.full_name || profile?.full_name || 'Your profile'
+
+  return (
+    <div style={{ maxWidth: '820px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+        <div className="avatar avatar-xl">{initials(displayName)}</div>
+        <div>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '400', color: 'var(--text-primary)' }}>
+            {displayName}
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '3px' }}>{form.headline || 'Add a headline to your profile'}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+            <div className="progress-bar" style={{ width: '120px' }}><div className="progress-fill" style={{ width: `${strength}%` }} /></div>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{strength}% complete</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: 'var(--surface-2)', padding: '4px', borderRadius: 'var(--radius-md)', width: 'fit-content', border: '1px solid var(--border)' }}>
+        {['profile', 'cv'].map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+            padding: '7px 16px', borderRadius: '7px', fontSize: '13px', fontWeight: '500', border: 'none',
+            background: activeTab === tab ? 'var(--surface)' : 'transparent',
+            color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+            boxShadow: activeTab === tab ? 'var(--shadow-sm)' : 'none'
+          }}>
+            {tab === 'profile' ? 'Profile details' : 'Upload CV'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'cv' && (
+        <div className="card">
+          <div className="card-head"><h3>Upload your CV</h3></div>
+          <div className="card-body">
+            <div style={{ background: 'var(--green-pale)', border: '1px solid #9fe1cb', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: '16px', fontSize: '12px', color: '#0f6e56' }}>
+              <i className="ti ti-shield-check" style={{ marginRight: '6px' }} />
+              Your existing profile data is protected — CV upload will only add or improve fields, never delete what you have saved.
+            </div>
+            {parseMsg && (
+              <div className={`alert alert-${parseMsg.type}`} style={{ marginBottom: '16px' }}>
+                <i className={`ti ${parseMsg.type === 'success' ? 'ti-circle-check' : 'ti-alert-circle'}`} style={{ fontSize: '16px', flexShrink: 0 }} />
+                {parseMsg.text}
+              </div>
+            )}
+            <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display: 'none' }} onChange={handleCVUpload} />
+            <div
+              onClick={() => !parsing && fileRef.current.click()}
+              style={{
+                border: '2px dashed var(--border-mid)', borderRadius: 'var(--radius-lg)',
+                padding: '48px 20px', textAlign: 'center', cursor: parsing ? 'wait' : 'pointer',
+                background: parsing ? 'var(--surface-2)' : 'transparent', transition: 'all 0.15s'
+              }}
+            >
+              {parsing ? (
+                <>
+                  <div className="spinner" style={{ width: '32px', height: '32px', margin: '0 auto 16px' }} />
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)' }}>{parseProgress}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Please wait — do not close this page</p>
+                </>
+              ) : (
+                <>
+                  <i className="ti ti-upload" style={{ fontSize: '36px', color: 'var(--text-muted)' }} />
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginTop: '14px' }}>Click to upload your CV</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>PDF, DOC, DOCX or TXT — max 10MB</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'profile' && (
+        <form onSubmit={handleSave}>
+          {msg && (
+            <div className={`alert alert-${msg.type}`} style={{ marginBottom: '20px' }}>
+              <i className={`ti ${msg.type === 'success' ? 'ti-circle-check' : 'ti-alert-circle'}`} style={{ fontSize: '16px', flexShrink: 0 }} />
+              {msg.text}
+            </div>
+          )}
+
+          <div className="card" style={{ marginBottom: '16px' }}>
+            <div className="card-head"><h3>Basic information</h3></div>
+            <div className="card-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+              <div className="form-group">
+                <label className="form-label">Full name</label>
+                <input value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Your full name" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Current location</label>
+                <input value={form.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Geneva, Switzerland" />
+              </div>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Professional headline</label>
+                <input value={form.headline} onChange={e => set('headline', e.target.value)} placeholder="e.g. Humanitarian & Development Advisor" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Years of experience</label>
+                <input type="number" value={form.years_experience} onChange={e => set('years_experience', e.target.value)} placeholder="e.g. 20" min="0" max="50" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Career status</label>
+                <select value={form.career_status} onChange={e => set('career_status', e.target.value)}>
+                  {CAREER_STATUS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Languages (comma separated)</label>
+                <input value={form.languages} onChange={e => set('languages', e.target.value)} placeholder="e.g. English, Arabic, Urdu, French" />
+              </div>
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Professional summary</label>
+                <textarea value={form.summary} onChange={e => set('summary', e.target.value)} rows={4} placeholder="A brief overview of your professional background and goals..." />
+              </div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: '20px' }}>
+            <div className="card-head"><h3>Sectors & themes</h3></div>
+            <div className="card-body">
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>Select all sectors relevant to your experience.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {SECTORS.map(s => {
+                  const active = form.sectors.includes(s)
+                  return (
+                    <button type="button" key={s} onClick={() => toggleSector(s)} style={{
+                      padding: '6px 12px', borderRadius: 'var(--radius-full)', fontSize: '12px', fontWeight: '500',
+                      background: active ? 'var(--green)' : 'var(--surface-2)',
+                      color: active ? '#fff' : 'var(--text-secondary)',
+                      border: `1px solid ${active ? 'var(--green)' : 'var(--border-mid)'}`,
+                      transition: 'all 0.15s'
+                    }}>
+                      {active && <i className="ti ti-check" style={{ fontSize: '12px', marginRight: '5px' }} />}
+                      {s}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {profile?.experience?.length > 0 && (
+            <div className="card" style={{ marginBottom: '20px' }}>
+              <div className="card-head"><h3>Experience extracted from CV</h3></div>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {profile.experience.map((exp, i) => (
+                  <div key={i} style={{ padding: '12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-md)', borderLeft: '3px solid var(--green)' }}>
+                    <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>{exp.title}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--green)', marginTop: '2px' }}>{exp.org}</p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{exp.from} - {exp.to}</p>
+                    {exp.summary && <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>{exp.summary}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button type="button" onClick={() => navigate('/dashboard')} className="btn-ghost">
+              Back to dashboard
+            </button>
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? <><div className="spinner" style={{ width: '14px', height: '14px' }} /> Saving...</> : <><i className="ti ti-device-floppy" style={{ fontSize: '15px' }} /> Save profile</>}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  )
+}
