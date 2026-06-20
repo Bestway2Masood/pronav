@@ -122,39 +122,26 @@ export default function ProfilePage() {
     if (!file) return
     setParsing(true); setParseMsg(null)
     try {
-      setParseProgress('Uploading your CV...')
-      const { error: uploadError } = await uploadDocument(user.id, file, 'cv')
-      if (uploadError) { setParseMsg({ type: 'error', text: 'Upload failed: ' + uploadError.message }); setParsing(false); return }
-      setParseProgress('Reading document...')
-      const fileContent = await extractTextFromFile(file)
-      setParseProgress('AI is analysing your CV — this takes about 15 seconds...')
-      const apiKey = import.meta.env.VITE_ANTHROPIC_KEY
-      const parsed = await parseWithClaude(fileContent, file.name, apiKey)
-      if (!parsed || !parsed.full_name) {
-        setParseMsg({ type: 'error', text: 'Could not extract profile from CV. Please fill in your profile details manually below.' })
-        setParsing(false); setParseProgress(''); return
-      }
       setParseProgress('Saving your profile...')
-      const { error: saveError } = await upsertProfile(user.id, {
-        full_name: parsed.full_name,
-        headline: parsed.headline,
-        summary: parsed.summary,
-        years_experience: parsed.years_experience,
-        location: parsed.location,
-        sectors: parsed.sectors || [],
-        themes: parsed.themes || [],
-        skills: parsed.skills || [],
-        languages: parsed.languages || [],
-        education: parsed.education || [],
-        experience: parsed.experience || [],
-        career_status: parsed.career_status || 'active',
-        cv_parsed: true
-      })
+      const safeUpdate = { cv_parsed: true }
+      if (parsed.full_name?.trim()) safeUpdate.full_name = parsed.full_name.trim()
+      if (parsed.headline?.trim()) safeUpdate.headline = parsed.headline.trim()
+      if (parsed.summary?.trim()) safeUpdate.summary = parsed.summary.trim()
+      if (parsed.years_experience > 0) safeUpdate.years_experience = parsed.years_experience
+      if (parsed.location?.trim()) safeUpdate.location = parsed.location.trim()
+      if (parsed.sectors?.length > 0) safeUpdate.sectors = parsed.sectors
+      if (parsed.themes?.length > 0) safeUpdate.themes = parsed.themes
+      if (parsed.skills?.length > 0) safeUpdate.skills = parsed.skills
+      if (parsed.languages?.length > 0) safeUpdate.languages = parsed.languages
+      if (parsed.education?.length > 0) safeUpdate.education = parsed.education
+      if (parsed.experience?.length > 0) safeUpdate.experience = parsed.experience
+      if (parsed.career_status) safeUpdate.career_status = parsed.career_status
+      const { error: saveError } = await upsertProfile(user.id, safeUpdate)
       if (saveError) {
         setParseMsg({ type: 'error', text: 'Profile could not be saved: ' + saveError.message })
       } else {
         await refreshProfile()
-        setParseMsg({ type: 'success', text: 'Profile updated successfully from your CV. Switch to "Profile details" to review.' })
+       setParseMsg({ type: 'success', text: 'CV parsed successfully — your existing data has been preserved and enhanced. Switching to profile view...' })
         setTimeout(() => setActiveTab('profile'), 2000)
       }
     } catch (err) {
