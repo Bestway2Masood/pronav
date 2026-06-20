@@ -1,14 +1,15 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { calculateProfileStrength } from '../lib/profile'
+import { supabase } from '../lib/supabase'
 
-const SECTORS = ['Education in Emergencies', 'Child Protection', 'Gender Equality', 'Public Health', 'ECD', 'Diaspora Engagement']
-
-const KNOWLEDGE_FEED = [
+const DEFAULT_KNOWLEDGE = [
   { title: 'INEE minimum standards update 2025', sector: 'Education in Emergencies', read: '5 min' },
   { title: 'New WHO framework on ECD in crisis settings', sector: 'Early Childhood Dev.', read: '8 min' },
-  { title: 'Gender-responsive programming — IASC update', sector: 'Gender Equality', read: '6 min' }
+  { title: 'Gender-responsive programming — IASC update', sector: 'Gender Equality', read: '6 min' },
+  { title: 'UNHCR global trends report 2025', sector: 'Refugee Response', read: '10 min' },
+  { title: 'Child protection in humanitarian action — updated guidelines', sector: 'Child Protection', read: '7 min' }
 ]
 
 const ADVISORY_SERVICES = [
@@ -33,13 +34,32 @@ export default function Dashboard() {
   const { setPageTitle } = useOutletContext()
   const { user, profile } = useAuth()
   const navigate = useNavigate()
+  const [metrics, setMetrics] = useState({ sessions: 0, documents: 0 })
   const strength = calculateProfileStrength(profile)
 
   useEffect(() => { setPageTitle('Dashboard') }, [])
 
+  useEffect(() => {
+    async function loadMetrics() {
+      if (!user) return
+      const [{ count: sessions }, { count: documents }] = await Promise.all([
+        supabase.from('advisory_sessions').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('documents').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
+      ])
+      setMetrics({ sessions: sessions || 0, documents: documents || 0 })
+    }
+    loadMetrics()
+  }, [user])
+
   const firstName = (profile?.full_name || user?.user_metadata?.full_name || 'there').split(' ')[0]
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
+  const knowledgeFeed = profile?.sectors?.length > 0
+    ? DEFAULT_KNOWLEDGE.filter(k => profile.sectors.some(s => k.sector.toLowerCase().includes(s.toLowerCase().split(' ')[0]))).slice(0, 3)
+    : DEFAULT_KNOWLEDGE.slice(0, 3)
+
+  const displayKnowledge = knowledgeFeed.length > 0 ? knowledgeFeed : DEFAULT_KNOWLEDGE.slice(0, 3)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1100px' }}>
@@ -48,7 +68,11 @@ export default function Dashboard() {
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{greeting}</p>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '400', color: '#fff' }}>Welcome back, {firstName}</h1>
-          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>3 new knowledge updates in your sectors today</p>
+          <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+            {profile?.sectors?.length > 0
+              ? `${profile.sectors.length} sectors active in your knowledge feed`
+              : 'Complete your profile to personalise your experience'}
+          </p>
         </div>
         <button className="btn-primary" onClick={() => navigate('/advisor')} style={{ flexShrink: 0 }}>
           Ask your advisor <i className="ti ti-arrow-right" style={{ fontSize: '14px' }} />
@@ -56,18 +80,18 @@ export default function Dashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-        <MetricCard icon="ti-message-dots" iconBg="var(--green-pale)" iconColor="#0f6e56" value="12" label="Advisory sessions" />
-        <MetricCard icon="ti-files" iconBg="#e6f1fb" iconColor="#185fa5" value="5" label="Documents uploaded" />
-        <MetricCard icon="ti-book" iconBg="var(--amber-pale)" iconColor="#854f0b" value="8" label="Topics explored" />
-        <MetricCard icon="ti-trophy" iconBg="#eeedfe" iconColor="#534ab7" value="74%" label="Knowledge score" />
+        <MetricCard icon="ti-message-dots" iconBg="var(--green-pale)" iconColor="#0f6e56" value={metrics.sessions} label="Advisory sessions" />
+        <MetricCard icon="ti-files" iconBg="#e6f1fb" iconColor="#185fa5" value={metrics.documents} label="Documents uploaded" />
+        <MetricCard icon="ti-book" iconBg="var(--amber-pale)" iconColor="#854f0b" value={profile?.sectors?.length || 0} label="Active sectors" />
+        <MetricCard icon="ti-user-check" iconBg="#eeedfe" iconColor="#534ab7" value={`${strength}%`} label="Profile strength" />
       </div>
 
-      {strength < 80 && (
+      {strength < 60 && (
         <div style={{ background: 'var(--amber-pale)', border: '1px solid #fac775', borderRadius: 'var(--radius-lg)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
           <i className="ti ti-alert-triangle" style={{ fontSize: '20px', color: '#854f0b', flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: '13px', fontWeight: '500', color: '#633806' }}>Complete your profile to unlock personalised advice</p>
-            <p style={{ fontSize: '12px', color: '#854f0b', marginTop: '2px' }}>Your profile is {strength}% complete. Upload your CV to get started.</p>
+            <p style={{ fontSize: '12px', color: '#854f0b', marginTop: '2px' }}>Your profile is {strength}% complete. Upload your CV to auto-populate everything.</p>
           </div>
           <button className="btn-primary" onClick={() => navigate('/profile')} style={{ flexShrink: 0, fontSize: '12px', padding: '8px 16px' }}>
             Complete profile
@@ -82,20 +106,22 @@ export default function Dashboard() {
             <button className="btn-ghost" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => navigate('/profile')}>Edit →</button>
           </div>
           <div className="card-body">
-            {profile ? (
+            {profile?.full_name ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div className="avatar avatar-lg">{(profile.full_name || '?').split(' ').slice(0,2).map(n=>n[0]).join('')}</div>
+                  <div className="avatar avatar-lg">{profile.full_name.split(' ').slice(0,2).map(n=>n[0]).join('')}</div>
                   <div>
                     <p style={{ fontWeight: '500', fontSize: '14px' }}>{profile.full_name}</p>
                     <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{profile.headline || 'No headline yet'}</p>
+                    {profile.location && <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}><i className="ti ti-map-pin" style={{ fontSize: '11px' }} /> {profile.location}</p>}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '14px' }}>
-                  {(profile.sectors || SECTORS).slice(0, 6).map(s => (
-                    <span key={s} className="tag tag-green">{s}</span>
-                  ))}
-                </div>
+                {profile.sectors?.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '14px' }}>
+                    {profile.sectors.slice(0, 5).map(s => <span key={s} className="tag tag-green">{s}</span>)}
+                    {profile.sectors.length > 5 && <span className="tag tag-gray">+{profile.sectors.length - 5} more</span>}
+                  </div>
+                )}
                 <div style={{ marginTop: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '5px' }}>
                     <span>Profile strength</span><span>{strength}%</span>
@@ -106,8 +132,10 @@ export default function Dashboard() {
             ) : (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <i className="ti ti-user-plus" style={{ fontSize: '32px', color: 'var(--text-muted)' }} />
-                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>No profile yet</p>
-                <button className="btn-primary" style={{ marginTop: '12px', fontSize: '12px', padding: '8px 16px' }} onClick={() => navigate('/profile')}>Build my profile</button>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>Upload your CV to build your profile automatically</p>
+                <button className="btn-primary" style={{ marginTop: '12px', fontSize: '12px', padding: '8px 16px' }} onClick={() => navigate('/profile')}>
+                  Upload CV
+                </button>
               </div>
             )}
           </div>
@@ -120,7 +148,7 @@ export default function Dashboard() {
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {ADVISORY_SERVICES.map(({ icon, label, desc, to, color, iconColor }) => (
-              <button key={label} onClick={() => navigate(to)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', textAlign: 'left', width: '100%', cursor: 'pointer', transition: 'background 0.15s' }}>
+              <button key={label} onClick={() => navigate(to)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', textAlign: 'left', width: '100%', cursor: 'pointer' }}>
                 <div style={{ width: '30px', height: '30px', background: color, borderRadius: '7px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <i className={`ti ${icon}`} style={{ fontSize: '15px', color: iconColor }} />
                 </div>
@@ -137,12 +165,12 @@ export default function Dashboard() {
 
       <div className="card">
         <div className="card-head">
-          <h3>Knowledge hub — today</h3>
+          <h3>Knowledge hub — {profile?.sectors?.length > 0 ? 'your sectors' : 'today'}</h3>
           <button className="btn-ghost" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => navigate('/knowledge')}>Browse all →</button>
         </div>
-        <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-          {KNOWLEDGE_FEED.map((item, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: i < KNOWLEDGE_FEED.length - 1 ? '1px solid var(--border)' : 'none' }}>
+        <div className="card-body">
+          {displayKnowledge.map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: i < displayKnowledge.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>{item.title}</p>
